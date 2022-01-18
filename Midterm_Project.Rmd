@@ -1,0 +1,272 @@
+---
+title: "Midterm Project"
+author: "Atticus Wang"
+date: "January 17, 2022"
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document:
+    df_print: paged
+---
+
+
+In this project we analyze how a book's rating is related to variables such as genre, publisher, country, format, and others.
+
+```{r, message = FALSE}
+# Load packages
+
+library(tidyverse)
+```
+
+
+We use the following datasets:
+
+- Each observation of `bx_ratings` consists of the ISBN number of the book being reviewed, the book reviewer's ID, and the ratings given (on a scale from 1 to 10).
+
+- Each observation of `bx_users` consists of the person's ID, their location (country, state, city), and their age.
+
+- Each observation of `bx_books` consists of information related to the book: ISBN, title, author(s), year of publication, and publisher.
+
+The three datasets above were collected from the online community Book-Crossing by Cai-Nicolas Ziegler in 2004.
+
+- The file `goodreads_big` contains information about 100000 books collected from Goodreads. Information includes genres and average ratings, among other things. This file was collected by Manav Dhamani.
+
+- The file `goodreads_small` contains more refined information about around 10000 books collected from Goodreads. Information includes language, publication date, and others. This file was collected by Soumik.
+
+All files above are freely available for download on Kaggle.
+
+
+```{r, message = FALSE}
+# Read files from folder
+
+bx_ratings <- read_csv2("/Users/atticus_w/Desktop/School/21-22 (Senior)/Data Science/project/BX-Book-Ratings.csv")
+
+bx_books <- read_csv2("/Users/atticus_w/Desktop/School/21-22 (Senior)/Data Science/project/BX-Books.csv")
+
+bx_users <- read_csv2("/Users/atticus_w/Desktop/School/21-22 (Senior)/Data Science/project/BX-Users.csv")
+
+goodreads_big <- read_csv("/Users/atticus_w/Desktop/School/21-22 (Senior)/Data Science/project/goodreads-big.csv")
+
+goodreads_small <- read_csv("/Users/atticus_w/Desktop/School/21-22 (Senior)/Data Science/project/goodreads-tidy.csv")
+```
+
+
+# Goodreads data
+
+We first tidy up the `goodreads_big` data: this includes deleting useless information, filtering out null and NA values as well as books that have been rated relatively few times. Then we perform some analyses (see below):
+
+```{r, message = FALSE, warning = FALSE}
+goodreads_tidy <- goodreads_big %>% 
+  select(-img, -link) %>%
+  filter(pages != 0 & is.na(isbn13) == FALSE & totalratings >= 100) %>%
+  filter(pages <= 2000) %>%
+  filter(reviews >= 10) %>%
+  mutate(num_authors = 1 + str_count(author, "[,]")) %>%
+  filter(num_authors <= 10) %>%
+  filter(is.na(isbn) == FALSE)
+```
+
+
+```{r}
+# Which book formats are the most common?
+goodreads_tidy %>%
+  group_by(bookformat) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+
+# Is a book's rating related to its format? Not really.
+goodreads_tidy %>%
+  filter(bookformat %in% c("Paperback","Hardcover","ebook","Mass Market Paperback")) %>%
+  ggplot(aes(x = rating, y = bookformat)) +
+  geom_boxplot()
+
+# Which books have the highest rating? The answer is a bit unexpected 
+# (spiritual and religious books, art and photography, and manga series).
+goodreads_tidy %>%
+  arrange(desc(rating)) %>%
+  head(100)
+
+# Is a book's rating related to its length? Longer books tend to have a 
+# higher average rating, and shorter books are more varied. Also, we noticed
+# there are not a lot of books with length between roughly 50 to 75 pages 
+# (there is an obvious gap on the plot).
+goodreads_tidy %>%
+  ggplot(mapping = aes(x = pages, y = rating)) +
+  geom_point(alpha = 0.01)
+
+# Is a book's rating related to the number of its posted ratings? We found
+# that books with more ratings have a slightly higher average rating.
+goodreads_tidy %>%
+  ggplot(mapping = aes(x = log(totalratings), y = rating)) +
+  geom_point(alpha = 0.01)
+
+# Is a book's format related to its length? I expected paperback and mass 
+# market paperback books to be shorter, but it turns out to be false.
+goodreads_tidy %>%
+  filter(bookformat %in% c("Paperback","Hardcover","ebook","Mass Market Paperback")) %>%
+  ggplot(mapping = aes(x = pages, y = bookformat)) +
+  geom_boxplot()
+
+# Now we take into account the genres. I created a column of logical 
+# variables for each major listed genre:
+goodreads_genres <- goodreads_tidy %>%
+  mutate(Art = str_detect(genre, "Art"),
+         Biography = str_detect(genre, "Biography"),
+         Business = str_detect(genre, "Business"),
+         ChickLit = str_detect(genre, "Chick Lit"),
+         Childrens = str_detect(genre, "Children's"), 
+         Christian = str_detect(genre, "Christian"), 
+         Classics = str_detect(genre, "Classics"), 
+         Comics = str_detect(genre, "Comics"), 
+         Contemporary = str_detect(genre, "Contemporary"), 
+         Cookbooks = str_detect(genre, "Cookbooks"), 
+         Crime = str_detect(genre, "Crime"), 
+         Ebooks = str_detect(genre, "Ebooks"), 
+         Fantasy = str_detect(genre, "Fantasy"), 
+         Fiction = str_detect(genre, "Fiction"), 
+         GayAndLesbian = str_detect(genre, "Gay and Lesbian"), 
+         GraphicNovels = str_detect(genre, "Graphic Novels"),
+         HistoricalFiction = str_detect(genre, "Historical Fiction"), 
+         History = str_detect(genre, "History"), 
+         Horror = str_detect(genre, "Horror"), 
+         HumorAndComedy = str_detect(genre, "Humor and Comedy"), 
+         Manga = str_detect(genre, "Manga"), 
+         Memoir = str_detect(genre, "Memoir"), 
+         Music = str_detect(genre, "Music"), 
+         Mystery = str_detect(genre, "Mystery"),
+         Nonfiction = str_detect(genre, "Nonfiction"), 
+         Paranormal = str_detect(genre, "Paranormal"), 
+         Philosophy = str_detect(genre, "Philosophy"), 
+         Poetry = str_detect(genre, "Poetry"), 
+         Psychology = str_detect(genre, "Psychology"), 
+         Religion = str_detect(genre, "Religion"), 
+         Romance = str_detect(genre, "Romance"), 
+         Science = str_detect(genre, "Science"), 
+         ScienceFiction = str_detect(genre, "Science Fiction"), 
+         SelfHelp = str_detect(genre, "Self Help"),
+         Suspense = str_detect(genre, "Suspense"), 
+         Spirituality = str_detect(genre, "Spirituality"),
+         Sports = str_detect(genre, "Sports"), 
+         Thriller = str_detect(genre, "Thriller"), 
+         Travel = str_detect(genre, "Travel"), 
+         YoungAdult = str_detect(genre, "YoungAdult"))
+
+# Which genre has the highest median rating? Contrary to our expectation 
+# (which are fantasy novels), the highest ranking ones are Manga, 
+# Spirituality, Christian, Religion, Poetry, Cookbooks, and Art.
+goodreads_genres %>%
+  select(-author,-bookformat,-desc,-genre,-isbn,-isbn13,-pages,-reviews,-title,-totalratings,-num_authors) %>%
+  pivot_longer(c(Art, Biography, Business, ChickLit, Childrens, Christian, Classics, Comics, Contemporary, Cookbooks, Crime, Ebooks, Fantasy, Fiction, GayAndLesbian, GraphicNovels, HistoricalFiction, History, Horror, HumorAndComedy, Manga, Memoir, Music, Mystery, Nonfiction, Paranormal, Philosophy, Poetry, Psychology, Religion, Romance, Science, ScienceFiction, SelfHelp, Suspense, Spirituality, Sports, Thriller, Travel, YoungAdult), names_to = "Genres", values_to = "Value") %>%
+  filter(Value == TRUE) %>%
+  ggplot(aes(x = rating, y = reorder(factor(Genres), rating))) +
+  geom_boxplot()
+```
+
+Next, we analyze the smaller but more detailed dataset (`goodreads_small`). Against, we first tidy up the data, then perform some analyses (see below).
+
+```{r message = FALSE, warning = FALSE}
+# In particular, we create a column (author1) containing the primary authors.
+goodreads_small_tidy <- goodreads_small %>%
+  filter(ratings_count >= 1000) %>%
+  filter(is.na(isbn) == FALSE & is.na(isbn13) == FALSE) %>%
+  separate(publication_date, into = c("publication_month", "publication_date", "publication_year")) %>%
+  separate(authors, into = c("author1", "author2", "author3"), sep = "/")
+```
+
+```{r}
+# Which authors who wrote at least 3 books have the highest rating? The
+# top 10 are Bill Watterson, Hiromu Arakawa, Hayao Miyazaki, J.K. Rowling,
+# James Herriot, Karen Kingsbury, Arthur Conan Doyle. Anton Chekhov.
+# Edgar Allan Poe, and Viktor E. Frankl.
+goodreads_small_tidy %>%
+  group_by(author1) %>%
+  summarize(author_avg_rating = mean(average_rating), count = n()) %>%
+  filter(count >= 3) %>%
+  arrange(desc(author_avg_rating))
+
+# Books from which year have the highest average rating? Turns out to be
+# years 1984, 86 and 88.
+goodreads_small_tidy %>%
+  group_by(publication_year) %>%
+  summarize(year_avg_rating = mean(average_rating), count = n()) %>%
+  filter(count >= 9) %>%
+  arrange(desc(year_avg_rating))
+
+# Books from which publisher have the highest average rating? The top three
+# are VIZ Media LLC (which mainly publishes mangas), Tyndale House Publishers
+# (which mainly publishes spiritual and religious books), and Vertigo (a 
+# part of DC Comics).
+goodreads_small_tidy %>%
+  group_by(publisher) %>%
+  summarize(publisher_avg_rating = mean(average_rating), count = n()) %>%
+  filter(count >= 10) %>%
+  arrange(desc(publisher_avg_rating))
+```
+
+
+# BookCrossing data
+
+As usual, we tidy up the data, remove duplicates, and do some analysis. Here we also use relational data, combining data from all three BX datasets.
+
+```{r, message = FALSE, warning = FALSE}
+bx_books <- bx_books %>%
+  select(-`Image-URL-L`,-`Image-URL-M`,-`Image-URL-S`)
+
+bx_books %>%
+  count(ISBN) %>%
+  filter(n > 1)
+
+bx_books <- bx_books %>%
+  filter(ISBN != 0486404242)
+
+bx_ratings <- bx_ratings %>%
+  filter(`Book-Rating` != 0)
+
+# Join data into one dataframe
+bx_all <- bx_ratings %>%
+  left_join(bx_books, by = "ISBN") %>%
+  left_join(bx_users, by = "User-ID") %>%
+  filter(is.na(`Book-Title`) == FALSE) %>%
+  filter(`Year-Of-Publication` != 0)
+
+# Books from which year have the highest average rating? It's 1970, 71 and 76.
+bx_all %>%
+  group_by(`Year-Of-Publication`) %>%
+  summarize(avg_rating = mean(`Book-Rating`), count = n()) %>%
+  filter(count >= 100) %>%
+  arrange(desc(avg_rating))
+
+# We also join data from the goodreads dataset to get information about
+# genres.
+goodreads_reduced <- goodreads_genres %>%
+  mutate(ISBN = isbn) %>%
+  select(ISBN, rating, Art, Biography, Business, ChickLit, Childrens, Christian, Classics, Comics, Contemporary, Cookbooks, Crime, Ebooks, Fantasy, Fiction, GayAndLesbian, GraphicNovels, HistoricalFiction, History, Horror, HumorAndComedy, Manga, Memoir, Music, Mystery, Nonfiction, Paranormal, Philosophy, Poetry, Psychology, Religion, Romance, Science, ScienceFiction, SelfHelp, Suspense, Spirituality, Sports, Thriller, Travel, YoungAdult)
+
+# Isolate the book reviewer's country for the next step
+bx_countries <- bx_all %>%
+  dplyr::mutate(Country = str_extract(Location, "[^,]+$")) %>%
+  left_join(goodreads_reduced, by = "ISBN") %>%
+  filter(is.na(rating) == FALSE)
+
+bx_countries
+
+# Is there a relationship between a country and its preferences in genres?
+bx_countries %>%
+  select(-`User-ID`, -Location) %>%
+  pivot_longer(c(Art, Biography, Business, ChickLit, Childrens, Christian, Classics, Comics, Contemporary, Cookbooks, Crime, Ebooks, Fantasy, Fiction, GayAndLesbian, GraphicNovels, HistoricalFiction, History, Horror, HumorAndComedy, Manga, Memoir, Music, Mystery, Nonfiction, Paranormal, Philosophy, Poetry, Psychology, Religion, Romance, Science, ScienceFiction, SelfHelp, Suspense, Spirituality, Sports, Thriller, Travel, YoungAdult), names_to = "Genres", values_to = "Value") %>%
+  filter(Value == TRUE) %>%
+  group_by(Country, Genres) %>%
+  summarise(avg_rating = mean(`Book-Rating`)) %>%
+  ggplot(aes(x = Country, y = Genres)) +
+  geom_tile(mapping = aes(fill = avg_rating)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+# Conclusion
+
+The conclusion is that there are some correlations between book ratings and other variables, especially genres and country. It was surprising that religious books had some of the highest ratings, but overall, it's safe to say that nothing affects a book's rating as much as the quality of the book itself.
+
+
+
